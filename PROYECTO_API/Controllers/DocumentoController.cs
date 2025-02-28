@@ -52,5 +52,45 @@ namespace PROYECTO_API.Controllers
             }
         }
 
+
+
+
+        [HttpGet]
+        [Route("Obtener/{id}")]
+        public IActionResult Obtener(int id)
+        {
+            try
+            {
+                using (var conexion = new SqlConnection(_cadenaSQL))
+                {
+                    conexion.Open();
+                    var cmd = new SqlCommand("sp_obtener_documento_por_id", conexion);
+                    cmd.Parameters.AddWithValue("id", id);
+                    cmd.CommandType = CommandType.StoredProcedure;
+
+                    var reader = cmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        var urlArchivo = reader["Ruta"]?.ToString(); // Suponiendo que la ruta está en la columna "Ruta"
+                        if (urlArchivo != null)
+                        {
+                            return Ok(new { url = urlArchivo });
+                        }
+                        else
+                        {
+                            return NotFound(new { mensaje = "Documento no encontrado" });
+                        }
+                    }
+
+                    return NotFound(new { mensaje = "Documento no encontrado" });
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { mensaje = ex.Message });
+            }
+        }
+
+
     }
 }
