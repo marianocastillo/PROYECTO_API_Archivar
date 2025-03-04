@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using PROYECTO_API.Models;
+using Dapper;
 
 
 namespace PROYECTO_API.Controllers
@@ -14,10 +15,13 @@ namespace PROYECTO_API.Controllers
     {
         private readonly string _rutaServidor;
         private readonly string _cadenaSQL;
+        private readonly IConfiguration _configuration;
+        private IConfiguration configuration;
 
         public DocumentoController (IConfiguration config){
             _rutaServidor = config.GetSection("Configuracion").GetSection("RutaServidor").Value;
             _cadenaSQL = config.GetConnectionString("CadenaSQL");
+            _configuration = configuration;
         }
 
         [HttpPost]
@@ -55,34 +59,34 @@ namespace PROYECTO_API.Controllers
 
 
 
-        [HttpGet]
-        [Route("Obtener/{id}")]
-        public IActionResult Obtener(int id)
+        [HttpGet("ObtenerPorDescripcion")]
+        public IActionResult ObtenerDocumentosPorDescripcion(string descripcion)
         {
             try
             {
-                using (var conexion = new SqlConnection(_cadenaSQL))
+                using (SqlConnection connection = new SqlConnection(_cadenaSQL))
                 {
-                    conexion.Open();
-                    var cmd = new SqlCommand("sp_obtener_documento_por_id", conexion);
-                    cmd.Parameters.AddWithValue("id", id);
-                    cmd.CommandType = CommandType.StoredProcedure;
-
-                    var reader = cmd.ExecuteReader();
-                    if (reader.Read())
+                    connection.Open();
+                    using (SqlCommand cmd = new SqlCommand("sp_obtener_documentos_por_descripcion", connection))
                     {
-                        var urlArchivo = reader["Ruta"]?.ToString(); // Suponiendo que la ruta está en la columna "Ruta"
-                        if (urlArchivo != null)
-                        {
-                            return Ok(new { url = urlArchivo });
-                        }
-                        else
-                        {
-                            return NotFound(new { mensaje = "Documento no encontrado" });
-                        }
-                    }
+                        cmd.CommandType = CommandType.StoredProcedure;
+                        cmd.Parameters.AddWithValue("@descripcion", descripcion);
 
-                    return NotFound(new { mensaje = "Documento no encontrado" });
+
+                        SqlDataReader reader = cmd.ExecuteReader();
+                        List<object> documentos = new List<object>();
+
+                        while (reader.Read())
+                        {
+                            documentos.Add(new
+                            {
+                                Descripcion = reader["Descripcion"].ToString(),
+                                Ruta = reader["Ruta"].ToString()
+                            });
+                        }
+
+                        return Ok(documentos);
+                    }
                 }
             }
             catch (Exception ex)
@@ -90,6 +94,53 @@ namespace PROYECTO_API.Controllers
                 return StatusCode(500, new { mensaje = ex.Message });
             }
         }
+
+
+
+
+        [HttpGet("archivos/{nombreArchivo}")]
+        public IActionResult ObtenerArchivo(string nombreArchivo)
+        {
+            try
+            {
+                string rutaCarpeta = @"C:\ProgramasVisual\Archivos\"; // Ruta donde guardas los archivos
+                string rutaCompleta = Path.Combine(rutaCarpeta, nombreArchivo);
+
+                if (!System.IO.File.Exists(rutaCompleta))
+                {
+                    return NotFound(new { mensaje = "Archivo no encontrado" });
+                }
+
+                string tipoMime = "application/octet-stream"; // Tipo MIME por defecto
+                string extension = Path.GetExtension(rutaCompleta).ToLower();
+
+                // Asignar tipos MIME comunes
+                var tiposMime = new Dictionary<string, string>
+        {
+            { ".pdf", "application/pdf" },
+            { ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+            { ".jpg", "image/jpeg" },
+            { ".png", "image/png" }
+        };
+
+                if (tiposMime.ContainsKey(extension))
+                {
+                    tipoMime = tiposMime[extension];
+                }
+
+                var archivoBytes = System.IO.File.ReadAllBytes(rutaCompleta);
+                return File(archivoBytes, tipoMime);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { mensaje = ex.Message });
+            }
+        }
+
+
+
+
+
 
 
     }
